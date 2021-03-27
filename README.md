@@ -56,8 +56,10 @@ Now the supernode service should be up and running on port 1234. On your edge no
 On Linux, compilation from source is straight forward:
 
 ```sh
-./autogen.sh
-./configure
+# create a build directory (to keep the src clean)
+mkdir build
+cd build
+cmake ..
 make
 
 # optionally install
