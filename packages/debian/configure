@@ -586,7 +586,8 @@ LIBOBJS
 EXTRA_DEP
 DATE
 EXTN
-GIT_COMMITS
+GIT_COMMIT_HASH
+GIT_COMMIT_DATE
 N2N_VERSION_SHORT
 MACHINE
 BUILDPACKAGE_EXTRA
@@ -1697,7 +1698,8 @@ fi
 
 # NOTE: this file is not actually used. You need to edit configure as well!
 N2N_VERSION_SHORT=`grep N2N_VERSION_SHORT ../../Makefile | head -1| cut -d "=" -f 2`
-GIT_COMMITS=`grep GIT_COMMITS ../../Makefile | head -1| cut -d "=" -f 2`
+GIT_COMMIT_HASH=`git rev-parse --short HEAD`
+GIT_COMMIT_DATE=`git show -s --format=%cd --date=format:%Y%m%d HEAD`
 
 MACHINE=`uname -m`
 SHORT_MACHINE=`uname -m | cut -b1-3`
