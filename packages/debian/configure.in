@@ -3,8 +3,9 @@ AC_INIT([Makefile.in], 1.0)
 AC_ARG_WITH(edgex,    [  --with-edgex            Build for Ubiquity-X])
 
 # NOTE: this file is not actually used. You need to edit configure as well!
-N2N_VERSION_SHORT=`grep N2N_VERSION_SHORT ../../Makefile | head -1| cut -d "=" -f 2`
-GIT_COMMITS=`grep GIT_COMMITS ../../Makefile | head -1| cut -d "=" -f 2`
+N2N_VERSION_SHORT=`grep N2N_VERSION ../../CMakeLists.txt | head -1| cut -d \" -f 2`
+GIT_COMMIT_HASH=`git rev-parse --short HEAD`
+GIT_COMMIT_DATE=`git show -s --format=%cd --date=format:%Y%m%d HEAD`
 
 MACHINE=`uname -m`
 SHORT_MACHINE=`uname -m | cut -b1-3`
@@ -52,7 +53,8 @@ AC_SUBST(APP)
 AC_SUBST(BUILDPACKAGE_EXTRA)
 AC_SUBST(MACHINE)
 AC_SUBST(N2N_VERSION_SHORT)
-AC_SUBST(GIT_COMMITS)
+AC_SUBST(GIT_COMMIT_HASH)
+AC_SUBST(GIT_COMMIT_DATE)
 AC_SUBST(EXTN)
 AC_SUBST(DATE)
 AC_SUBST(EXTRA_DEP)
