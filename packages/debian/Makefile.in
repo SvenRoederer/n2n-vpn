@@ -7,7 +7,7 @@ N2N_BUILD=${N2N_HOME}/packages/debian/n2n
 all: clean pkg
 
 pkg:
-	cmake -B build ../..
+	cmake -B build "${N2N_HOME}"
 	make -C build
 	if test -e "${N2N_BUILD}"; then /bin/rm -fr ${N2N_BUILD}; fi
 	mkdir -p ${N2N_BUILD}/usr/sbin ${N2N_BUILD}/usr/share/man/man1 ${N2N_BUILD}/usr/share/man/man7 ${N2N_BUILD}/usr/share/man/man8
