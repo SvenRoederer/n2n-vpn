@@ -18,10 +18,8 @@ PKG_MAINTAINER:=Emanuele Faranda <faranda@ntop.org>
 PKG_LICENSE:=GPL3
 PKG_BUILD_PARALLEL:=1
 
-# autogen fix
-PKG_FIXUP:=autoreconf
-
 include $(INCLUDE_DIR)/package.mk
+include $(INCLUDE_DIR)/cmake.mk
 
 define Package/n2n/Default
   SECTION:=net
@@ -48,11 +46,6 @@ endef
 
 define Package/n2n-supernode/description
 The supernode for the N2N infrastructure
-endef
-
-define Build/Configure
-	( cd $(PKG_BUILD_DIR); ./autogen.sh )
-	$(call Build/Configure/Default)
 endef
 
 define Package/n2n-edge/conffiles
