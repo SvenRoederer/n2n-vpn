@@ -38,19 +38,12 @@
 
 /* Moved here to define _CRT_SECURE_NO_WARNINGS before all the including takes place */
 #ifdef WIN32
-#ifndef CMAKE_BUILD
-#include "config.h" /* Visual C++ */
-#else
 #include "win32/winconfig.h"
-#endif
 #define N2N_CAN_NAME_IFACE 1
 #undef N2N_HAVE_DAEMON
 #undef N2N_HAVE_TCP           /* as explained on https://github.com/ntop/n2n/pull/627#issuecomment-782093706 */
 #undef N2N_HAVE_SETUID
 #else
-#ifndef CMAKE_BUILD
-#include "config.h"
-#endif
 #endif
 
 
