@@ -5,7 +5,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=n2n
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/SvenRoederer/n2n-vpn.git
