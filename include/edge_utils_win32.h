@@ -1,5 +1,5 @@
 /**
- * (C) 2007-21 - ntop.org and contributors
+ * (C) 2007-22 - ntop.org and contributors
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,13 +37,13 @@
  */
 //#define SKIP_MULTICAST_PEERS_DISCOVERY
 
+// TODO: this struct is pretty empty now, collapse it to just n2n_edge_t ?
 struct tunread_arg {
     n2n_edge_t *eee;
-    int *keep_running;
 };
 
 extern HANDLE startTunReadThread (struct tunread_arg *arg);
-int get_best_interface_ip(n2n_edge_t * eee, dec_ip_str_t ip_addr);
+int get_best_interface_ip (n2n_edge_t * eee, dec_ip_str_t ip_addr);
 
 
 #endif /* WIN32 */

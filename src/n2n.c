@@ -1,5 +1,5 @@
 /**
- * (C) 2007-21 - ntop.org and contributors
+ * (C) 2007-22 - ntop.org and contributors
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,13 +28,13 @@
 
 /* ************************************** */
 
-SOCKET open_socket (int local_port, int bind_any, int type /* 0 = UDP, TCP otherwise */) {
+SOCKET open_socket (int local_port, in_addr_t address, int type /* 0 = UDP, TCP otherwise */) {
 
     SOCKET sock_fd;
     struct sockaddr_in local_address;
     int sockopt;
 
-    if((sock_fd = socket(PF_INET, ((type == 0) ? SOCK_DGRAM : SOCK_STREAM) , 0)) < 0) {
+    if((int)(sock_fd = socket(PF_INET, ((type == 0) ? SOCK_DGRAM : SOCK_STREAM) , 0)) < 0) {
         traceEvent(TRACE_ERROR, "Unable to create socket [%s][%d]\n",
                    strerror(errno), sock_fd);
         return(-1);
@@ -50,7 +50,7 @@ SOCKET open_socket (int local_port, int bind_any, int type /* 0 = UDP, TCP other
     memset(&local_address, 0, sizeof(local_address));
     local_address.sin_family = AF_INET;
     local_address.sin_port = htons(local_port);
-    local_address.sin_addr.s_addr = htonl(bind_any ? INADDR_ANY : INADDR_LOOPBACK);
+    local_address.sin_addr.s_addr = htonl(address);
 
     if(bind(sock_fd,(struct sockaddr*) &local_address, sizeof(local_address)) == -1) {
         traceEvent(TRACE_ERROR, "Bind error on local port %u [%s]\n", local_port, strerror(errno));
@@ -148,8 +148,9 @@ void traceEvent (int eventTraceLevel, char* file, int line, char * format, ...) 
             snprintf(out_buf, sizeof(out_buf), "%s%s", extra_msg, buf);
             syslog(LOG_INFO, "%s", out_buf);
         } else {
+#endif
             for(i = strlen(file) - 1; i > 0; i--) {
-                if(file[i] == '/') {
+                if((file[i] == '/') || (file[i] == '\\')) {
                     i++;
                     break;
                 }
@@ -157,18 +158,8 @@ void traceEvent (int eventTraceLevel, char* file, int line, char * format, ...) 
             snprintf(out_buf, sizeof(out_buf), "%s [%s:%d] %s%s", theDate, &file[i], line, extra_msg, buf);
             fprintf(traceFile, "%s\n", out_buf);
             fflush(traceFile);
+#ifndef WIN32
         }
-#else
-        /* this is the WIN32 code */
-        for(i = strlen(file) - 1; i > 0; i--) {
-            if(file[i] == '\\') {
-                i++;
-                break;
-            }
-        }
-        snprintf(out_buf, sizeof(out_buf), "%s [%s:%d] %s%s", theDate, &file[i], line, extra_msg, buf);
-        fprintf(traceFile, "%s\n", out_buf);
-        fflush(traceFile);
 #endif
     }
 
@@ -256,66 +247,225 @@ char * macaddr_str (macstr_t buf,
 
 /** Resolve the supernode IP address.
  *
- *  REVISIT: This is a really bad idea. The edge will block completely while the
- *  hostname resolution is performed. This could take 15 seconds.
  */
-int supernode2sock (n2n_sock_t * sn, const n2n_sn_name_t addrIn) {
+int supernode2sock (n2n_sock_t *sn, const n2n_sn_name_t addrIn) {
 
     n2n_sn_name_t addr;
-    const char *supernode_host;
+    char *supernode_host;
+    char *supernode_port;
     int rv = 0;
+    int nameerr;
+    const struct addrinfo aihints = {0, PF_INET, 0, 0, 0, NULL, NULL, NULL};
+    struct addrinfo * ainfo = NULL;
+    struct sockaddr_in * saddr;
+
+    sn->family = AF_INVALID;
 
     memcpy(addr, addrIn, N2N_EDGE_SN_HOST_SIZE);
-
     supernode_host = strtok(addr, ":");
 
     if(supernode_host) {
-        char *supernode_port = strtok(NULL, ":");
-        const struct addrinfo aihints = {0, PF_INET, 0, 0, 0, NULL, NULL, NULL};
-        struct addrinfo * ainfo = NULL;
-        int nameerr;
-
+        supernode_port = strtok(NULL, ":");
         if(supernode_port) {
             sn->port = atoi(supernode_port);
-        } else {
-            traceEvent(TRACE_WARNING, "Bad supernode parameter (-l <host:port>) %s %s:%s",
-                       addr, supernode_host, supernode_port);
-        }
-
-        nameerr = getaddrinfo(supernode_host, NULL, &aihints, &ainfo);
-
-        if(0 == nameerr) {
-            struct sockaddr_in * saddr;
-
-            /* ainfo s the head of a linked list if non-NULL. */
-            if(ainfo && (PF_INET == ainfo->ai_family)) {
-                /* It is definitely and IPv4 address -> sockaddr_in */
-                saddr = (struct sockaddr_in *)ainfo->ai_addr;
-
-                memcpy(sn->addr.v4, &(saddr->sin_addr.s_addr), IPV4_SIZE);
-                sn->family = AF_INET;
+            nameerr = getaddrinfo(supernode_host, NULL, &aihints, &ainfo);
+            if(0 == nameerr) {
+               /* ainfo s the head of a linked list if non-NULL. */
+                if(ainfo && (PF_INET == ainfo->ai_family)) {
+                    /* It is definitely and IPv4 address -> sockaddr_in */
+                    saddr = (struct sockaddr_in *)ainfo->ai_addr;
+                    memcpy(sn->addr.v4, &(saddr->sin_addr.s_addr), IPV4_SIZE);
+                    sn->family = AF_INET;
+                    traceEvent(TRACE_INFO, "supernode2sock successfully resolves supernode IPv4 address for %s", supernode_host);
+                    rv = 0;
+                } else {
+                    /* Should only return IPv4 addresses due to aihints. */
+                    traceEvent(TRACE_WARNING, "supernode2sock fails to resolve supernode IPv4 address for %s", supernode_host);
+                    rv = -1;
+                }
+                freeaddrinfo(ainfo); /* free everything allocated by getaddrinfo(). */
             } else {
-                /* Should only return IPv4 addresses due to aihints. */
-                traceEvent(TRACE_WARNING, "Failed to resolve supernode IPv4 address for %s", supernode_host);
-                rv = -1;
+                traceEvent(TRACE_WARNING, "supernode2sock fails to resolve supernode host %s, %d: %s", supernode_host, nameerr, gai_strerror(nameerr));
+                rv = -2;
             }
-
-            freeaddrinfo(ainfo); /* free everything allocated by getaddrinfo(). */
-            ainfo = NULL;
         } else {
-            traceEvent(TRACE_WARNING, "Failed to resolve supernode host %s, %d: %s", supernode_host, nameerr, gai_strerror(nameerr));
-            rv = -2;
+            traceEvent(TRACE_WARNING, "supernode2sock sees malformed supernode parameter (-l <host:port>) %s", addrIn);
+            rv = -3;
         }
-
     } else {
-        traceEvent(TRACE_WARNING, "Wrong supernode parameter (-l <host:port>)");
-        rv = -3;
+        traceEvent(TRACE_WARNING, "supernode2sock sees malformed supernode parameter (-l <host:port>) %s",
+                   addrIn);
+        rv = -4;
     }
 
-    return(rv);
+    ainfo = NULL;
+
+    return rv;
 }
 
+
+#ifdef HAVE_PTHREAD
+N2N_THREAD_RETURN_DATATYPE resolve_thread(N2N_THREAD_PARAMETER_DATATYPE p) {
+
+    n2n_resolve_parameter_t *param = (n2n_resolve_parameter_t*)p;
+    n2n_resolve_ip_sock_t   *entry, *tmp_entry;
+    time_t                  rep_time = N2N_RESOLVE_INTERVAL / 10;
+    time_t                  now;
+
+    while(1) {
+        sleep(N2N_RESOLVE_INTERVAL / 60); /* wake up in-between to check for signaled requests */
+
+        // what's the time?
+        now = time(NULL);
+
+        // lock access
+        pthread_mutex_lock(&param->access);
+
+        // is it time to resolve yet?
+        if(((param->request)) || ((now - param->last_resolved) > rep_time)) {
+            HASH_ITER(hh, param->list, entry, tmp_entry) {
+                // resolve
+                entry->error_code = supernode2sock(&entry->sock, entry->org_ip);
+                // if socket changed and no error
+                if(!sock_equal(&entry->sock, entry->org_sock)
+                  && (!entry->error_code)) {
+                    // flag the change
+                    param->changed = 1;
+               }
+            }
+            param->last_resolved = now;
+
+            // any request fulfilled
+            param->request = 0;
+
+            // determine next resolver repetition (shorter time if resolver errors occured)
+            rep_time = N2N_RESOLVE_INTERVAL;
+            HASH_ITER(hh, param->list, entry, tmp_entry) {
+                if(entry->error_code) {
+                    rep_time = N2N_RESOLVE_INTERVAL / 10;
+                    break;
+                }
+            }
+        }
+
+        // unlock access
+        pthread_mutex_unlock(&param->access);
+    }
+}
+#endif
+
+
+int resolve_create_thread (n2n_resolve_parameter_t **param, struct peer_info *sn_list) {
+
+#ifdef HAVE_PTHREAD
+    struct peer_info        *sn, *tmp_sn;
+    n2n_resolve_ip_sock_t   *entry;
+    int                     ret;
+
+    // create parameter structure
+    *param = (n2n_resolve_parameter_t*)calloc(1, sizeof(n2n_resolve_parameter_t));
+    if(*param) {
+        HASH_ITER(hh, sn_list, sn, tmp_sn) {
+            // create entries for those peers that come with ip_addr string (from command-line)
+            if(sn->ip_addr) {
+                entry = (n2n_resolve_ip_sock_t*)calloc(1, sizeof(n2n_resolve_ip_sock_t));
+                if(entry) {
+                    entry->org_ip = sn->ip_addr;
+                    entry->org_sock = &(sn->sock);
+                    memcpy(&(entry->sock), &(sn->sock), sizeof(n2n_sock_t));
+                    HASH_ADD(hh, (*param)->list, org_ip, sizeof(char*), entry);
+                } else
+                    traceEvent(TRACE_WARNING, "resolve_create_thread was unable to add list entry for supernode '%s'", sn->ip_addr);
+            }
+        }
+        (*param)->check_interval = N2N_RESOLVE_CHECK_INTERVAL;
+    } else {
+        traceEvent(TRACE_WARNING, "resolve_create_thread was unable to create list of supernodes");
+        return -1;
+    }
+
+    // create thread
+    ret = pthread_create(&((*param)->id), NULL, resolve_thread, (void *)*param);
+    if(ret) {
+        traceEvent(TRACE_WARNING, "resolve_create_thread failed to create resolver thread with error number %d", ret);
+        return -1;
+    }
+
+    pthread_mutex_init(&((*param)->access), NULL);
+
+    return 0;
+#else
+    return -1;
+#endif
+}
+
+
+void resolve_cancel_thread (n2n_resolve_parameter_t *param) {
+
+#ifdef HAVE_PTHREAD
+    pthread_cancel(param->id);
+    free(param);
+#endif
+}
+
+
+uint8_t resolve_check (n2n_resolve_parameter_t *param, uint8_t requires_resolution, time_t now) {
+
+    uint8_t ret = requires_resolution; /* if trylock fails, it still requires resolution */
+
+#ifdef HAVE_PTHREAD    
+    n2n_resolve_ip_sock_t   *entry, *tmp_entry;
+    n2n_sock_str_t sock_buf;
+
+    if(NULL == param)
+        return ret;
+    
+    // check_interval and last_check do not need to be guarded by the mutex because
+    // their values get changed and evaluated only here
+
+    if((now - param->last_checked > param->check_interval) || (requires_resolution)) {
+        // try to lock access
+        if(pthread_mutex_trylock(&param->access) == 0) {
+            // any changes?
+            if(param->changed) {
+                // reset flag
+                param->changed = 0;
+                // unselectively copy all socks (even those with error code, that would be the old one because
+                // sockets do not get overwritten in case of error in resolve_thread) from list to supernode list
+                HASH_ITER(hh, param->list, entry, tmp_entry) {
+                    memcpy(entry->org_sock, &entry->sock, sizeof(n2n_sock_t));
+                    traceEvent(TRACE_INFO, "resolve_check renews ip address of supernode '%s' to %s",
+                                           entry->org_ip, sock_to_cstr(sock_buf, &(entry->sock)));
+               }
+            }
+
+            // let the resolver thread know eventual difficulties in reaching the supernode
+            if(requires_resolution) {
+                param->request = 1;
+                ret = 0;
+            }
+
+            param->last_checked = now;
+
+            // next appointment
+            if(param->request)
+                // earlier if resolver still working on fulfilling a request
+                param->check_interval = N2N_RESOLVE_CHECK_INTERVAL / 10;
+            else
+                param->check_interval = N2N_RESOLVE_CHECK_INTERVAL;
+
+            // unlock access
+            pthread_mutex_unlock(&param->access);
+        }
+    }
+#endif
+
+    return ret;
+}
+
+
 /* ************************************** */
+
 
 struct peer_info* add_sn_to_list_by_mac_or_sock (struct peer_info **sn_list, n2n_sock_t *sock, const n2n_mac_t mac, int *skip_add) {
 
@@ -432,8 +582,8 @@ void print_n2n_version () {
 
     printf("Welcome to n2n v.%s for %s\n"
            "Built on %s\n"
-           "Copyright 2007-2021 - ntop.org and contributors\n\n",
-           GIT_RELEASE, PACKAGE_OSNAME, PACKAGE_BUILDDATE);
+           "Copyright 2007-2022 - ntop.org and contributors\n\n",
+           PACKAGE_VERSION, PACKAGE_OSNAME, PACKAGE_BUILDDATE);
 }
 
 /* *********************************************** */
@@ -486,6 +636,8 @@ size_t purge_peer_list (struct peer_info **peer_list,
                 }
             }
             HASH_DEL(*peer_list, scan);
+            mgmt_event_post(N2N_EVENT_PEER,N2N_EVENT_PEER_PURGE,scan);
+            /* FIXME: generates events for more than just p2p */
             retval++;
             free(scan);
         }
@@ -502,6 +654,8 @@ size_t clear_peer_list (struct peer_info ** peer_list) {
 
     HASH_ITER(hh, *peer_list, scan, tmp) {
         HASH_DEL(*peer_list, scan);
+        mgmt_event_post(N2N_EVENT_PEER,N2N_EVENT_PEER_CLEAR,scan);
+        /* FIXME: generates events for more than just p2p */
         retval++;
         free(scan);
     }
@@ -606,6 +760,44 @@ int sock_equal (const n2n_sock_t * a,
 
     /* equal */
     return(1);
+}
+
+
+/* *********************************************** */
+
+// fills a specified memory area with random numbers
+int memrnd (uint8_t *address, size_t len) {
+
+    for(; len >= 4; len -= 4) {
+        *(uint32_t*)address = n2n_rand();
+        address += 4;
+    }
+
+    for(; len > 0; len--) {
+        *address = n2n_rand();
+        address++;
+    }
+
+    return 0;
+}
+
+
+// exclusive-ors a specified memory area with another
+int memxor (uint8_t *destination, const uint8_t *source, size_t len) {
+
+    for(; len >= 4; len -= 4) {
+        *(uint32_t*)destination ^= *(uint32_t*)source;
+        source += 4;
+        destination += 4;
+    }
+
+    for(; len > 0; len--) {
+        *destination ^= *source;
+        source++;
+        destination++;
+    }
+
+    return 0;
 }
 
 /* *********************************************** */

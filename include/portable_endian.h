@@ -1,3 +1,22 @@
+/**
+ * (C) 2007-22 - ntop.org and contributors
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not see see <http://www.gnu.org/licenses/>
+ *
+ */
+
+
 // taken from
 // https://raw.githubusercontent.com/pyca/bcrypt/master/src/_csrc/portable_endian.h
 // as of June 11, 2020
@@ -135,8 +154,8 @@
 #       define be32toh(x) _byteswap_ulong(x)
 #       define le32toh(x) (x)
 
-#       define htobe64(x) _byteswap_uint64(x)
-#       define be64toh(x) _byteswap_uint64(x)
+#       define htobe64(x) (((uint64_t)htobe32(((uint32_t)(((uint64_t)(x)) >> 32))) & 0x00000000FFFFFFFFULL) | (((uint64_t)htobe32(((uint32_t)(x)))) << 32))
+#       define be64toh(x) (((uint64_t)be32toh(((uint32_t)(((uint64_t)(x)) >> 32))) & 0x00000000FFFFFFFFULL) | (((uint64_t)be32toh(((uint32_t)(x)))) << 32))
 #       define htole64(x) (x)
 #       define le64toh(x) (x)
 

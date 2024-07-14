@@ -1,5 +1,5 @@
 /**
- * (C) 2007-21 - ntop.org and contributors
+ * (C) 2007-22 - ntop.org and contributors
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -68,7 +68,8 @@ int main() {
     }
 
     keep_running = 1;
-    rc = run_edge_loop(eee, &keep_running);
+    eee->keep_running = &keep_running;
+    rc = run_edge_loop(eee);
 
     edge_term(eee);
     tuntap_close(&tuntap);

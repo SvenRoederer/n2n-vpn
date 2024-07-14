@@ -1,5 +1,5 @@
 /**
- * (C) 2007-21 - ntop.org and contributors
+ * (C) 2007-22 - ntop.org and contributors
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,13 +31,13 @@ int main (int argc, char* argv[]) {
     char *my_mac_address = (char*)"DE:AD:BE:EF:01:10";
     char *my_ipv4_addr   = (char*)"1.2.3.4";
     char *supernode      = (char*)"7.8.9.10:1234";
-    int  keep_on_running = 1;
+    int keep_on_running = 1;
 
     /* Increase tracelevel to see what's happening */
     setTraceLevel(10);
 
     /* Random seed */
-    n2n_srand (n2n_seed());
+    n2n_srand(n2n_seed());
 
     /*
        NOTE

@@ -1,5 +1,5 @@
 /**
- * (C) 2007-21 - ntop.org and contributors
+ * (C) 2007-22 - ntop.org and contributors
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +31,8 @@
     tunctl -u UID -t tunX
 */
 
+#define SN_MANUAL_MAC   /* allows supernode MAC address to be set manually */
+
 #define N2N_HAVE_DAEMON /* needs to be defined before it gets undefined */
 #define N2N_HAVE_TCP    /* needs to be defined before it gets undefined */
 
@@ -38,7 +40,11 @@
 
 /* Moved here to define _CRT_SECURE_NO_WARNINGS before all the including takes place */
 #ifdef WIN32
-#include "win32/winconfig.h"
+#ifndef CMAKE_BUILD
+#include "config.h" /* Visual C++ */
+#else
+#include "winconfig.h"
+#endif
 #define N2N_CAN_NAME_IFACE 1
 #undef N2N_HAVE_DAEMON
 #undef N2N_HAVE_TCP           /* as explained on https://github.com/ntop/n2n/pull/627#issuecomment-782093706 */
@@ -94,7 +100,7 @@
 #include <syslog.h>
 #include <sys/wait.h>
 
-#ifdef HAVE_LIBZSTD
+#ifdef HAVE_ZSTD
 #include <zstd.h>
 #endif
 
@@ -130,8 +136,7 @@
 #ifdef WIN32
 #include <winsock2.h>           /* for tcp */
 #define SHUT_RDWR   SD_BOTH     /* for tcp */
-#define SOL_TCP     IPPROTO_TCP /* for tcp */
-#include "win32/wintap.h"
+#include "wintap.h"
 #include <sys/stat.h>
 #else
 #include <pwd.h>
@@ -144,20 +149,20 @@
 #include "aes.h"
 #include "cc20.h"
 #include "speck.h"
+#include "curve25519.h"
 #include "n2n_regex.h"
 #include "sn_selection.h"
 #include "network_traffic_filter.h"
+#include "auth.h"
+
+#if defined(HAVE_MINIUPNP) || defined(HAVE_NATPMP)
+#include "n2n_port_mapping.h"
+#endif // HAVE_MINIUPNP || HAVE_NATPMP
+
+/* ************************************** */
 
 #include "header_encryption.h"
 #include "tf.h"
-
-/* ************************************** */
-
-#if !defined(SOL_TCP) && defined(IPPROTO_TCP)
-#define SOL_TCP IPPROTO_TCP
-#endif
-
-/* ************************************** */
 
 #ifndef TRACE_ERROR
 #define TRACE_ERROR       0, __FILE__, __LINE__
@@ -175,6 +180,10 @@ int n2n_transop_tf_init (const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
 int n2n_transop_aes_init (const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
 int n2n_transop_cc20_init (const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
 int n2n_transop_speck_init (const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
+int n2n_transop_lzo_init (const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
+#ifdef HAVE_ZSTD
+int n2n_transop_zstd_init (const n2n_edge_conf_t *conf, n2n_trans_op_t *ttt);
+#endif
 
 /* Log */
 void setTraceLevel (int level);
@@ -211,12 +220,14 @@ void hexdump (const uint8_t * buf, size_t len);
 void print_n2n_version ();
 int is_empty_ip_address (const n2n_sock_t * sock);
 void print_edge_stats (const n2n_edge_t *eee);
+int memrnd (uint8_t *address, size_t len);
+int memxor (uint8_t *destination, const uint8_t *source, size_t len);
 
 /* Sockets */
 char* sock_to_cstr (n2n_sock_str_t out,
                     const n2n_sock_t * sock);
 char * ip_subnet_to_str (dec_ip_bit_str_t buf, const n2n_ip_subnet_t *ipaddr);
-SOCKET open_socket (int local_port, int bind_any, int type);
+SOCKET open_socket (int local_port, in_addr_t address, int type);
 int sock_equal (const n2n_sock_t * a,
                 const n2n_sock_t * b);
 
@@ -258,20 +269,24 @@ void edge_send_packet2net (n2n_edge_t *eee, uint8_t *tap_pkt, size_t len);
 void edge_read_from_tap (n2n_edge_t *eee);
 int edge_get_n2n_socket (n2n_edge_t *eee);
 int edge_get_management_socket (n2n_edge_t *eee);
-int run_edge_loop (n2n_edge_t *eee, int *keep_running);
+int run_edge_loop (n2n_edge_t *eee);
 int quick_edge_init (char *device_name, char *community_name,
                      char *encrypt_key, char *device_mac,
                      char *local_ip_address,
                      char *supernode_ip_address_port,
                      int *keep_on_running);
 int comm_init (struct sn_community *comm, char *cmn);
-int sn_init (n2n_sn_t *sss);
+int sn_init_defaults (n2n_sn_t *sss);
+void sn_init (n2n_sn_t *sss);
 void sn_term (n2n_sn_t *sss);
 int supernode2sock (n2n_sock_t * sn, const n2n_sn_name_t addrIn);
 struct peer_info* add_sn_to_list_by_mac_or_sock (struct peer_info **sn_list, n2n_sock_t *sock, const n2n_mac_t mac, int *skip_add);
-int run_sn_loop (n2n_sn_t *sss, int *keep_running);
+int run_sn_loop (n2n_sn_t *sss);
 int assign_one_ip_subnet (n2n_sn_t *sss, struct sn_community *comm);
 const char* compression_str (uint8_t cmpr);
 const char* transop_str (enum n2n_transform tr);
 
+void readFromMgmtSocket (n2n_edge_t *eee);
+
+void mgmt_event_post (enum n2n_event_topic topic, int data0, void *data1);
 #endif /* _N2N_H_ */
